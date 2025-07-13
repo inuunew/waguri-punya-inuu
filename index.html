@@ -2,190 +2,193 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <title>Waguri Run Anime</title>
+  <title>Waguri Run - Monster Chaos Mode</title>
   <style>
-    html, body {
+    body {
       margin: 0;
-      padding: 0;
       overflow: hidden;
-      background: #111;
+      background: url('https://i.imgur.com/oYZx6HR.jpg') no-repeat center center fixed;
+      background-size: cover;
     }
     canvas {
       display: block;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.8);
+      border: 5px solid #ff69b4;
+      box-shadow: 0 0 20px #ff1493;
+    }
+    #score, #lives {
       position: absolute;
-      top: 0;
-      left: 0;
+      top: 20px;
+      font-size: 24px;
+      color: white;
+      text-shadow: 1px 1px 4px #000;
+      font-family: 'Comic Sans MS', cursive;
+    }
+    #score {
+      left: 20px;
+    }
+    #lives {
+      right: 20px;
     }
   </style>
 </head>
 <body>
-<canvas id="gameCanvas"></canvas>
+  <div id="score">Skor: 0</div>
+  <div id="lives">❤️❤️❤️</div>
+  <canvas id="game" width="800" height="300"></canvas>
 
-<!-- Audio -->
-<audio id="jumpSound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_c86be0e3b6.mp3" preload="auto"></audio>
-<audio id="gameOverSound" src="https://cdn.pixabay.com/download/audio/2022/01/22/audio_649c43b99e.mp3" preload="auto"></audio>
-<audio id="bgMusic" src="https://cdn.pixabay.com/download/audio/2023/01/09/audio_f4379dcd25.mp3" preload="auto" loop></audio>
+  <!-- Audio -->
+  <audio id="jumpSound" src="https://assets.mixkit.co/sfx/preview/mixkit-quick-jump-arcade-game-239.wav"></audio>
+  <audio id="gameOverSound" src="https://assets.mixkit.co/sfx/preview/mixkit-arcade-retro-game-over-213.wav"></audio>
+  <audio id="bgm" src="https://files.catbox.moe/dkbohm.mp3" autoplay loop></audio>
 
-<script>
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
 
-// Fullscreen setup
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
+    const jumpSound = document.getElementById("jumpSound");
+    const gameOverSound = document.getElementById("gameOverSound");
+    const bgm = document.getElementById("bgm");
 
-// Audio
-const jumpSound = document.getElementById("jumpSound");
-const gameOverSound = document.getElementById("gameOverSound");
-const bgMusic = document.getElementById("bgMusic");
-bgMusic.volume = 0.5;
-bgMusic.play();
+    let score = 0;
+    let isGameOver = false;
+    let lives = 3;
+    let jumpCount = 0;
 
-// Images
-const playerImg = new Image();
-playerImg.src = "https://i.imgur.com/43UuwEY.png"; // Waguri anime
+    const waguriImage = new Image();
+    waguriImage.src = "https://i.imgur.com/KV3YtKD.png";
 
-const monsterImgs = [
-  "https://i.imgur.com/M59eU4M.png",
-  "https://i.imgur.com/OJrB3I1.png",
-  "https://i.imgur.com/bOyATan.png"
-].map(src => {
-  const img = new Image();
-  img.src = src;
-  return img;
-});
+    const monsterImages = [
+      "https://i.imgur.com/XRloRH6.png",
+      "https://i.imgur.com/bOyATan.png",
+      "https://i.imgur.com/Bs8Z1nd.png"
+    ];
+    let currentMonsterImage = new Image();
+    currentMonsterImage.src = monsterImages[0];
 
-// Game objects
-let player = {
-  x: 80,
-  y: 0,
-  width: 80,
-  height: 100,
-  vy: 0,
-  onGround: false,
-  jumpCount: 0,
-  lives: 3
-};
+    const dino = {
+      x: 50,
+      y: 200,
+      width: 50,
+      height: 60,
+      dy: 0,
+      gravity: 1.5,
+      jumpPower: -16,
+      grounded: true,
+    };
 
-let gravity = 1.5;
-let obstacles = [];
-let score = 0;
-let gameOver = false;
+    const obstacle = {
+      x: canvas.width,
+      y: 220,
+      width: 50,
+      height: 60,
+      speed: 6,
+    };
 
-// Obstacle generation
-function spawnObstacle() {
-  const img = monsterImgs[Math.floor(Math.random() * monsterImgs.length)];
-  obstacles.push({
-    x: canvas.width,
-    y: canvas.height - 100,
-    width: 80,
-    height: 100,
-    img: img
-  });
-}
-setInterval(spawnObstacle, 2000);
+    function drawDino() {
+      ctx.drawImage(waguriImage, dino.x, dino.y, dino.width, dino.height);
+    }
 
-// Explosion effect
-function drawExplosion(x, y) {
-  ctx.beginPath();
-  ctx.arc(x + 40, y + 50, 40, 0, Math.PI * 2);
-  ctx.fillStyle = "red";
-  ctx.fill();
-}
+    function drawObstacle() {
+      ctx.drawImage(currentMonsterImage, obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+    }
 
-// Jump logic
-document.addEventListener("keydown", e => {
-  if ((e.code === "Space" || e.code === "ArrowUp") && player.jumpCount < 2 && !gameOver) {
-    player.vy = -18;
-    player.jumpCount++;
-    jumpSound.currentTime = 0;
-    jumpSound.play();
-  }
-});
+    function update() {
+      if (isGameOver) return;
 
-// Game loop
-function update() {
-  if (gameOver) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Physics
-  player.vy += gravity;
-  player.y += player.vy;
+      dino.y += dino.dy;
+      dino.dy += dino.gravity;
 
-  if (player.y + player.height >= canvas.height) {
-    player.y = canvas.height - player.height;
-    player.vy = 0;
-    player.jumpCount = 0;
-  }
+      if (dino.y > 200) {
+        dino.y = 200;
+        dino.dy = 0;
+        dino.grounded = true;
+        jumpCount = 0;
+      }
 
-  // Move obstacles
-  obstacles.forEach(obs => obs.x -= 6);
+      obstacle.x -= obstacle.speed;
+      if (obstacle.x + obstacle.width < 0) {
+        obstacle.x = canvas.width;
+        score++;
+        document.getElementById("score").textContent = "Skor: " + score;
+        obstacle.speed += 0.2;
 
-  // Collision
-  obstacles.forEach((obs, i) => {
-    if (
-      player.x < obs.x + obs.width &&
-      player.x + player.width > obs.x &&
-      player.y < obs.y + obs.height &&
-      player.y + player.height > obs.y
-    ) {
-      drawExplosion(player.x, player.y);
-      obstacles.splice(i, 1);
-      player.lives--;
-      if (player.lives <= 0) {
-        endGame();
+        // Ganti monster secara acak
+        const randomIndex = Math.floor(Math.random() * monsterImages.length);
+        currentMonsterImage.src = monsterImages[randomIndex];
+      }
+
+      // Cek tabrakan
+      if (
+        dino.x < obstacle.x + obstacle.width &&
+        dino.x + dino.width > obstacle.x &&
+        dino.y < obstacle.y + obstacle.height &&
+        dino.y + dino.height > obstacle.y
+      ) {
+        handleCollision();
+      }
+
+      drawDino();
+      drawObstacle();
+
+      requestAnimationFrame(update);
+    }
+
+    function handleCollision() {
+      lives--;
+      updateLives();
+      obstacle.x = canvas.width;
+      if (lives <= 0) {
+        triggerGameOver();
       }
     }
-  });
 
-  score++;
-}
+    function updateLives() {
+      const lifeText = "❤️".repeat(lives) + "🖤".repeat(3 - lives);
+      document.getElementById("lives").textContent = lifeText;
+    }
 
-// Drawing
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function triggerGameOver() {
+      isGameOver = true;
+      gameOverSound.play();
+      bgm.pause();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#fff";
+      ctx.font = "36px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Game Over!", canvas.width / 2, canvas.height / 2);
+      ctx.fillText("Tekan R untuk ulangi", canvas.width / 2, canvas.height / 2 + 50);
+    }
 
-  // Background
-  ctx.fillStyle = "#222";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+    document.addEventListener("keydown", function (e) {
+      if ((e.code === "Space" || e.code === "ArrowUp") && !isGameOver) {
+        if (jumpCount < 2) {
+          dino.dy = dino.jumpPower;
+          dino.grounded = false;
+          jumpSound.play();
+          jumpCount++;
+        }
+      } else if (e.code === "KeyR" && isGameOver) {
+        // Reset game
+        obstacle.x = canvas.width;
+        obstacle.speed = 6;
+        score = 0;
+        lives = 3;
+        jumpCount = 0;
+        isGameOver = false;
+        document.getElementById("score").textContent = "Skor: 0";
+        updateLives();
+        bgm.currentTime = 0;
+        bgm.play();
+        update();
+      }
+    });
 
-  // Player
-  ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
-
-  // Obstacles
-  obstacles.forEach(obs => {
-    ctx.drawImage(obs.img, obs.x, obs.y, obs.width, obs.height);
-  });
-
-  // Score & lives
-  ctx.fillStyle = "white";
-  ctx.font = "24px Arial";
-  ctx.fillText("Skor: " + score, 20, 30);
-  ctx.fillText("❤️ Nyawa: " + player.lives, 20, 60);
-
-  if (gameOver) {
-    ctx.fillStyle = "red";
-    ctx.font = "48px Arial";
-    ctx.fillText("GAME OVER", canvas.width / 2 - 150, canvas.height / 2);
-  }
-}
-
-function endGame() {
-  gameOver = true;
-  gameOverSound.play();
-  bgMusic.pause();
-}
-
-// Loop
-function loop() {
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
-loop();
-</script>
+    waguriImage.onload = update;
+  </script>
 </body>
 </html>
